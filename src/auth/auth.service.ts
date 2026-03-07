@@ -101,6 +101,8 @@ export class AuthService {
         });
     }
 
+
+    // helpers
     private getAccessToken(userId: string, role: string) {
         return this.jwtService.sign(
             { sub: userId, role },
@@ -120,4 +122,20 @@ export class AuthService {
     }
 
 
+    // Getters for users
+    async getAllUsers() {
+        return this.prisma.user.findMany();
+    }
+
+    async getUserById(id: string) {
+        return this.prisma.user.findUnique({
+            where: { id },
+        });
+    }
+
+    async getUserByEmail(email: string) {
+        return this.prisma.user.findUnique({
+            where: { email },
+        });
+    }
 }
