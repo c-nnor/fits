@@ -70,7 +70,9 @@ export class AuthService {
             throw new UnauthorizedException('Invalid credentials');
         }
 
+        // Short-lived token used for authenticated API calls.
         const accessToken = this.getAccessToken(user.id, user.role);
+        // Long-lived token used only to mint a new access token.
         const refreshToken = this.getRefreshToken(user.id);
 
         // Hash and persist refresh token for later validation/rotation.
@@ -99,6 +101,53 @@ export class AuthService {
             where: { id: userId },
             data: { refreshTokenHash: null },
         });
+    }
+
+    async refreshTokens(refreshToken: string) {
+        let payload: { sub: string };
+        try {
+            // Step 1: verify signature + expiry of the refresh token.
+            payload = this.jwtService.verify<{ sub: string }>(refreshToken);
+        } catch {
+            throw new UnauthorizedException('Invalid refresh token');
+        }
+
+        // Step 2: load the user referenced by token payload (sub = user id).
+        const user = await this.prisma.user.findUnique({
+            where: { id: payload.sub },
+        });
+
+        // User must still have a stored refresh token hash (e.g. not logged out).
+        if (!user?.refreshTokenHash) {
+            throw new UnauthorizedException('Invalid refresh token');
+        }
+
+        // Step 3: compare incoming raw token to stored bcrypt hash.
+        const isRefreshTokenValid = await bcrypt.compare(refreshToken, user.refreshTokenHash);
+        if (!isRefreshTokenValid) {
+            throw new UnauthorizedException('Invalid refresh token');
+        }
+
+        // Step 4: rotate both tokens so old refresh token cannot be reused.
+        const accessToken = this.getAccessToken(user.id, user.role);
+        const newRefreshToken = this.getRefreshToken(user.id);
+        const newRefreshTokenHash = await this.hashToken(newRefreshToken);
+
+        await this.prisma.user.update({
+            where: { id: user.id },
+            data: { refreshTokenHash: newRefreshTokenHash },
+        });
+
+        return {
+            accessToken,
+            refreshTokenForCookie: newRefreshToken,
+            user: {
+                id: user.id,
+                email: user.email,
+                username: user.username,
+                role: user.role,
+            },
+        };
     }
 
 
