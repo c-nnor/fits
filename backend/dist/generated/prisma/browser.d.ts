@@ -1,0 +1,10 @@
+import * as Prisma from './internal/prismaNamespaceBrowser.js';
+export { Prisma };
+export * as $Enums from './enums.js';
+export * from './enums.js';
+export type User = Prisma.UserModel;
+export type Post = Prisma.PostModel;
+export type Comment = Prisma.CommentModel;
+export type Like = Prisma.LikeModel;
+export type Follow = Prisma.FollowModel;
+export type SavedPost = Prisma.SavedPostModel;
