@@ -18,6 +18,7 @@ import { Roles } from './decorators/roles.decorator';
 import { RolesGuard } from './guards/roles.guard';
 import { AuthGuard } from '@nestjs/passport';
 import { OAuthUserPayload } from './types/oauth-user.type';
+import { Throttle } from '@nestjs/throttler';
 
 const REFRESH_COOKIE_NAME = 'refreshToken';
 const REFRESH_COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -101,11 +102,13 @@ export class AuthController {
     };
   }
 
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
   @Post('register')
   register(@Body() registerDto: RegisterDto) {
     return this.authService.register(registerDto);
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('login')
   async login(
     @Body() dto: LoginDto,
@@ -123,6 +126,7 @@ export class AuthController {
     };
   }
 
+  @Throttle({ default: { ttl: 60_000, limit: 30 } })
   @Post('refresh')
   async refresh(
     @Req() req: Request,
@@ -168,12 +172,14 @@ export class AuthController {
     return this.authService.getAllUsers();
   }
 
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Get('google')
   @UseGuards(AuthGuard('google'))
   googleAuth() {
     return;
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Get('google/callback')
   @UseGuards(AuthGuard('google'))
   async googleAuthCallback(
@@ -184,6 +190,7 @@ export class AuthController {
     return this.respondOauthSuccess(res, sessionPayload);
   }
 
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Get('tiktok')
   tiktokAuth(@Res() res: Response) {
     const { state, authorizationUrl } =
@@ -196,6 +203,7 @@ export class AuthController {
     return res.redirect(authorizationUrl);
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Get('tiktok/callback')
   async tiktokAuthCallback(
     @Req() req: Request,

@@ -9,6 +9,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
+import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CreatePostDto } from './dto/create-post.dto';
@@ -25,6 +26,7 @@ type UploadedFile = {
 export class PostsController {
   constructor(private readonly postsService: PostsService) {}
 
+  @Throttle({ default: { limit: 3, ttl: 600_000 } })
   @Post()
   @UseGuards(JwtAuthGuard)
   @UseInterceptors(
