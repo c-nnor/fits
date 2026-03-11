@@ -18,6 +18,9 @@ async function bootstrap() {
     credentials: true,
   });
 
+  // for production, we need to trust the proxy for rate limiting to work :O
+  // if we are adding extra proxie or cloudflare CDN, we need to revisit this
+  app.getHttpAdapter().getInstance().set('trust proxy', 1);
   await app.listen(process.env.PORT ?? 3000);
 }
 bootstrap();
