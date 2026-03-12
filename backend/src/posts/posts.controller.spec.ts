@@ -4,11 +4,22 @@ import { PostsService } from './posts.service';
 
 describe('PostsController', () => {
   const createPost = jest.fn();
-  const postsService = { createPost } as unknown as PostsService;
+  const getPostById = jest.fn();
+  const postsService = { createPost, getPostById } as unknown as PostsService;
   const controller = new PostsController(postsService);
 
   beforeEach(() => {
     createPost.mockReset();
+    getPostById.mockReset();
+  });
+
+  it('fetches a post by id', async () => {
+    getPostById.mockResolvedValue({ id: 'post-1', views: 7 });
+
+    const result = await controller.getPostById('post-1');
+
+    expect(result).toEqual({ id: 'post-1', views: 7 });
+    expect(getPostById).toHaveBeenCalledWith('post-1');
   });
 
   it('creates a post with parsed videoDurationSeconds', async () => {

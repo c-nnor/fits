@@ -31,12 +31,68 @@ describe('PostsService', () => {
     save: jest.fn(),
     remove: jest.fn(),
   };
+  const postViewsCacheService = {
+    incrementPendingViews: jest.fn(),
+  };
 
   let service: PostsService;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new PostsService(prisma, storageService as any);
+    service = new PostsService(
+      prisma,
+      storageService as any,
+      postViewsCacheService as any,
+    );
+  });
+
+  it('returns not found for unknown posts', async () => {
+    prisma.post = {
+      findUnique: jest.fn().mockResolvedValue(null),
+      update: jest.fn(),
+    };
+
+    await expect(service.getPostById('missing')).rejects.toThrow('Post not found');
+  });
+
+  it('returns post with cached view increment when redis is available', async () => {
+    prisma.post = {
+      findUnique: jest.fn().mockResolvedValue({
+        id: 'post-1',
+        userId: 'user-1',
+        views: 10,
+        media: [],
+      }),
+      update: jest.fn(),
+    };
+    postViewsCacheService.incrementPendingViews.mockResolvedValue(3);
+
+    const result = await service.getPostById('post-1');
+
+    expect(result).toMatchObject({ id: 'post-1', views: 13 });
+    expect(prisma.post.update).not.toHaveBeenCalled();
+  });
+
+  it('falls back to direct db writes when redis is unavailable', async () => {
+    prisma.post = {
+      findUnique: jest.fn().mockResolvedValue({
+        id: 'post-1',
+        userId: 'user-1',
+        views: 10,
+        media: [],
+      }),
+      update: jest.fn().mockResolvedValue({ views: 11 }),
+    };
+    postViewsCacheService.incrementPendingViews.mockResolvedValue(null);
+
+    const result = await service.getPostById('post-1');
+
+    expect(result).toMatchObject({ id: 'post-1', views: 11 });
+    expect(prisma.post.update).toHaveBeenCalledWith({
+      where: { id: 'post-1' },
+      data: { views: { increment: 1 } },
+      select: { views: true },
+    });
   });
 
   it('throws when no files are provided', async () => {
