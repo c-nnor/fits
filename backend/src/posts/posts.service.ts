@@ -1,8 +1,14 @@
-import { BadRequestException, Inject, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { STORAGE_SERVICE } from '../storage/storage.module';
 import type { StorageService } from '../storage/storage.types';
 import { CreatePostDto } from './dto/create-post.dto';
+import { PostViewsCacheService } from './post-views-cache.service';
 
 type UploadedFile = {
   buffer: Buffer;
@@ -17,6 +23,7 @@ export class PostsService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(STORAGE_SERVICE) private readonly storageService: StorageService,
+    private readonly postViewsCacheService: PostViewsCacheService,
   ) {}
 
   async createPost(
@@ -83,7 +90,7 @@ export class PostsService {
         }),
       );
 
-      const post = await this.prisma.$transaction(async (tx) => {
+      const post = await (this.prisma as any).$transaction(async (tx: any) => {
         const post = await tx.post.create({
           data: {
             userId,
@@ -92,7 +99,7 @@ export class PostsService {
           } as any,
         });
 
-        await (tx as any).postMedia.createMany({
+        await tx.postMedia.createMany({
           data: uploaded.map((item) => ({
             postId: post.id,
             type: item.type,
@@ -120,6 +127,42 @@ export class PostsService {
       await Promise.all(uploadedKeys.map((key) => this.storageService.remove(key)));
       throw error;
     }
+  }
+
+  async getPostById(postId: string) {
+    const post = await (this.prisma as any).post.findUnique({
+      where: { id: postId },
+      include: {
+        media: {
+          orderBy: { sortOrder: 'asc' },
+        },
+      },
+    });
+
+    if (!post) {
+      throw new NotFoundException('Post not found');
+    }
+
+    const pendingViews =
+      await this.postViewsCacheService.incrementPendingViews(postId);
+
+    if (pendingViews == null) {
+      const updatedPost = await (this.prisma as any).post.update({
+        where: { id: postId },
+        data: { views: { increment: 1 } },
+        select: { views: true },
+      });
+
+      return {
+        ...post,
+        views: updatedPost.views,
+      };
+    }
+
+    return {
+      ...post,
+      views: post.views + pendingViews,
+    };
   }
 
   private resolveExtension(file: UploadedFile) {

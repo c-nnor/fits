@@ -2,6 +2,8 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Get,
+  Param,
   Post,
   Req,
   UploadedFiles,
@@ -25,6 +27,11 @@ type UploadedFile = {
 @Controller('posts')
 export class PostsController {
   constructor(private readonly postsService: PostsService) {}
+
+  @Get(':id')
+  async getPostById(@Param('id') id: string) {
+    return this.postsService.getPostById(id);
+  }
 
   @Throttle({ default: { limit: 3, ttl: 600_000 } })
   @Post()
