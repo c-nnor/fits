@@ -95,6 +95,78 @@ describe('PostsService', () => {
     });
   });
 
+  it('returns feed ranked by recency and engagement', async () => {
+    const now = new Date('2026-03-12T12:00:00.000Z').getTime();
+    jest.spyOn(Date, 'now').mockReturnValue(now);
+    prisma.post = {
+      findMany: jest.fn().mockResolvedValue([
+        {
+          id: 'new-low-engagement',
+          views: 2,
+          createdAt: new Date('2026-03-12T11:30:00.000Z'),
+          _count: { likes: 0, comments: 0 },
+          media: [],
+          user: { id: 'u-1', username: 'a' },
+        },
+        {
+          id: 'old-high-engagement',
+          views: 300,
+          createdAt: new Date('2026-03-09T12:00:00.000Z'),
+          _count: { likes: 60, comments: 20 },
+          media: [],
+          user: { id: 'u-2', username: 'b' },
+        },
+      ]),
+    };
+
+    const result = await service.getFeed({ limit: 10 });
+
+    expect(result.items).toHaveLength(2);
+    expect(result.items[0].id).toBe('new-low-engagement');
+    expect(prisma.post.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        take: 50,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      }),
+    );
+    jest.restoreAllMocks();
+  });
+
+  it('returns explore feed ranked by random plus engagement', async () => {
+    const randomSpy = jest
+      .spyOn(Math, 'random')
+      .mockReturnValueOnce(0.1)
+      .mockReturnValueOnce(0.9);
+
+    prisma.post = {
+      findMany: jest.fn().mockResolvedValue([
+        {
+          id: 'high-engagement-low-random',
+          views: 1000,
+          createdAt: new Date('2026-03-12T11:00:00.000Z'),
+          _count: { likes: 200, comments: 50 },
+          media: [],
+          user: { id: 'u-1', username: 'a' },
+        },
+        {
+          id: 'low-engagement-high-random',
+          views: 1,
+          createdAt: new Date('2026-03-12T10:00:00.000Z'),
+          _count: { likes: 0, comments: 0 },
+          media: [],
+          user: { id: 'u-2', username: 'b' },
+        },
+      ]),
+    };
+
+    const result = await service.getExploreFeed({ limit: 10 });
+
+    expect(result.items).toHaveLength(2);
+    expect(result.items[0].id).toBe('low-engagement-high-random');
+    expect(randomSpy).toHaveBeenCalledTimes(2);
+    randomSpy.mockRestore();
+  });
+
   it('throws when no files are provided', async () => {
     await expect(service.createPost('user-1', {}, [])).rejects.toBeInstanceOf(
       BadRequestException,

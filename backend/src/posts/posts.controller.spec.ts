@@ -5,12 +5,42 @@ import { PostsService } from './posts.service';
 describe('PostsController', () => {
   const createPost = jest.fn();
   const getPostById = jest.fn();
-  const postsService = { createPost, getPostById } as unknown as PostsService;
+  const getFeed = jest.fn();
+  const getExploreFeed = jest.fn();
+  const postsService = {
+    createPost,
+    getPostById,
+    getFeed,
+    getExploreFeed,
+  } as unknown as PostsService;
   const controller = new PostsController(postsService);
 
   beforeEach(() => {
     createPost.mockReset();
     getPostById.mockReset();
+    getFeed.mockReset();
+    getExploreFeed.mockReset();
+  });
+
+  it('fetches the ranked feed', async () => {
+    getFeed.mockResolvedValue({ items: [], nextCursor: null });
+
+    const result = await controller.getFeed('12', 'post-1');
+
+    expect(result).toEqual({ items: [], nextCursor: null });
+    expect(getFeed).toHaveBeenCalledWith({ limit: 12, cursor: 'post-1' });
+  });
+
+  it('fetches the explore feed', async () => {
+    getExploreFeed.mockResolvedValue({ items: [], nextCursor: null });
+
+    const result = await controller.getExploreFeed(undefined, undefined);
+
+    expect(result).toEqual({ items: [], nextCursor: null });
+    expect(getExploreFeed).toHaveBeenCalledWith({
+      limit: undefined,
+      cursor: undefined,
+    });
   });
 
   it('fetches a post by id', async () => {

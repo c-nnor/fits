@@ -17,9 +17,16 @@ type UploadedFile = {
 };
 
 type PostMediaKind = 'IMAGE' | 'VIDEO';
+type FeedQuery = {
+  limit?: number;
+  cursor?: string;
+};
 
 @Injectable()
 export class PostsService {
+  private readonly defaultFeedLimit = 10;
+  private readonly maxFeedLimit = 30;
+
   constructor(
     private readonly prisma: PrismaService,
     @Inject(STORAGE_SERVICE) private readonly storageService: StorageService,
@@ -165,6 +172,108 @@ export class PostsService {
     };
   }
 
+  async getFeed(query: FeedQuery) {
+    const take = this.resolveTake(query.limit);
+    const candidateTake = Math.min(take * 5, 100);
+    const basePosts = await (this.prisma as any).post.findMany({
+      take: candidateTake,
+      skip: query.cursor ? 1 : 0,
+      ...(query.cursor ? { cursor: { id: query.cursor } } : {}),
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      include: {
+        media: {
+          orderBy: { sortOrder: 'asc' },
+        },
+        user: {
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            profileImage: true,
+          },
+        },
+        _count: {
+          select: {
+            likes: true,
+            comments: true,
+          },
+        },
+      },
+    });
+
+    const nowMs = Date.now();
+    const ranked = basePosts
+      .map((post: any) => ({
+        ...post,
+        score: this.computeFeedScore({
+          nowMs,
+          createdAt: post.createdAt,
+          views: post.views,
+          likes: post._count.likes,
+          comments: post._count.comments,
+        }),
+      }))
+      .sort((left: any, right: any) => right.score - left.score)
+      .slice(0, take);
+
+    const items = ranked.map(({ score, ...post }: any) => post);
+    const last = items.at(-1);
+    return {
+      items,
+      nextCursor: last?.id ?? null,
+    };
+  }
+
+  async getExploreFeed(query: FeedQuery) {
+    const take = this.resolveTake(query.limit);
+    const candidateTake = Math.min(take * 6, 120);
+    const basePosts = await (this.prisma as any).post.findMany({
+      take: candidateTake,
+      skip: query.cursor ? 1 : 0,
+      ...(query.cursor ? { cursor: { id: query.cursor } } : {}),
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      include: {
+        media: {
+          orderBy: { sortOrder: 'asc' },
+        },
+        user: {
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            profileImage: true,
+          },
+        },
+        _count: {
+          select: {
+            likes: true,
+            comments: true,
+          },
+        },
+      },
+    });
+
+    const ranked = basePosts
+      .map((post: any) => ({
+        ...post,
+        score: this.computeExploreScore({
+          randomSeed: Math.random(),
+          views: post.views,
+          likes: post._count.likes,
+          comments: post._count.comments,
+        }),
+      }))
+      .sort((left: any, right: any) => right.score - left.score)
+      .slice(0, take);
+
+    const items = ranked.map(({ score, ...post }: any) => post);
+    const last = items.at(-1);
+    return {
+      items,
+      nextCursor: last?.id ?? null,
+    };
+  }
+
   private resolveExtension(file: UploadedFile) {
     const fromName = file.originalname.split('.').pop()?.toLowerCase();
     if (fromName && /^[a-z0-9]+$/.test(fromName)) {
@@ -188,5 +297,42 @@ export class PostsService {
     }
 
     return 'bin';
+  }
+
+  private resolveTake(limit: number | undefined) {
+    if (limit == null || !Number.isFinite(limit)) {
+      return this.defaultFeedLimit;
+    }
+    return Math.min(Math.max(Math.floor(limit), 1), this.maxFeedLimit);
+  }
+
+  private computeFeedScore(input: {
+    nowMs: number;
+    createdAt: Date;
+    views: number;
+    likes: number;
+    comments: number;
+  }) {
+    const ageHours = Math.max(
+      0,
+      (input.nowMs - new Date(input.createdAt).getTime()) / (1000 * 60 * 60),
+    );
+    const recencyDecay = Math.exp(-ageHours / 36);
+    const engagementRaw =
+      input.likes * 3 + input.comments * 4 + Math.log1p(input.views);
+    const engagementBoost = Math.log1p(Math.max(0, engagementRaw));
+    return recencyDecay * 100 + engagementBoost * 15;
+  }
+
+  private computeExploreScore(input: {
+    randomSeed: number;
+    views: number;
+    likes: number;
+    comments: number;
+  }) {
+    const engagementRaw =
+      input.likes * 3 + input.comments * 4 + Math.log1p(input.views);
+    const engagementBoost = Math.log1p(Math.max(0, engagementRaw));
+    return input.randomSeed * 100 + engagementBoost * 5;
   }
 }
