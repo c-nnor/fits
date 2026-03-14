@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   Post,
+  Query,
   Req,
   UploadedFiles,
   UseGuards,
@@ -27,6 +28,28 @@ type UploadedFile = {
 @Controller('posts')
 export class PostsController {
   constructor(private readonly postsService: PostsService) {}
+
+  @Get('feed')
+  async getFeed(
+    @Query('limit') limit?: string,
+    @Query('cursor') cursor?: string,
+  ) {
+    return this.postsService.getFeed({
+      limit: this.parseOptionalInt(limit),
+      cursor: cursor || undefined,
+    });
+  }
+
+  @Get('explore')
+  async getExploreFeed(
+    @Query('limit') limit?: string,
+    @Query('cursor') cursor?: string,
+  ) {
+    return this.postsService.getExploreFeed({
+      limit: this.parseOptionalInt(limit),
+      cursor: cursor || undefined,
+    });
+  }
 
   @Get(':id')
   async getPostById(@Param('id') id: string) {
@@ -61,8 +84,8 @@ export class PostsController {
     }
 
     const parsed = Number.parseInt(value, 10);
-    if (!Number.isFinite(parsed)) {
-      throw new BadRequestException('videoDurationSeconds must be an integer');
+    if (!Number.isFinite(parsed) || parsed < 1) {
+      throw new BadRequestException('Expected a positive integer');
     }
 
     return parsed;
